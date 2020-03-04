@@ -1,5 +1,5 @@
 set -ex
-python train.py --name egan_cifar10 \
+python3 train.py --name egan_cifar10 \
        --dataset_mode torchvision --batch_size 32 --eval_size 256 --dataroot None \
        --model egan \
        --gpu_ids 0 \

@@ -1,5 +1,5 @@
 set -ex
-python train.py --name lsgan_cifar10 \
+python3 train.py --name lsgan_cifar10 \
        --dataset_mode torchvision --batch_size 32 --dataroot None \
        --model two_player_gan \
        --gpu_ids 0 \
