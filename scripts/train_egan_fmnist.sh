@@ -6,7 +6,7 @@ python3 train.py  \
     --model egan --gpu_ids 0\
     --preprocess "" --input_nc 1 --output_nc 1 --crop_size 28 \
     --z_dim 100 --z_type Gaussian \
-    --d_loss_mode vanilla --g_loss_mode vanilla lsgan --which_D S 
+    --d_loss_mode vanilla --g_loss_mode vanilla lsgan --which_D S \
     --lambda_f 0.05 --candi_num 1\
     --netD DCGAN_mnist --netG DCGAN_mnist --ngf 32 --ndf 32 --g_norm none \
     --d_norm batch --init_type normal \
