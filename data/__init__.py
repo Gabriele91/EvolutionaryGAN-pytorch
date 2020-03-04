@@ -70,7 +70,7 @@ class CustomDatasetDataLoader():
         self.opt = opt
         dataset_class = find_dataset_using_name(opt.dataset_mode)
         self.dataset = dataset_class(opt)
-        self.eval_size = opt.eval_size if opt.model == 'egan' else 0 
+        self.eval_size = opt.eval_size if opt.model == 'egan' or  opt.model == 'moegan' else 0 
         self.bs = opt.batch_size*(opt.D_iters + 1) + self.eval_size
 
         print("dataset [%s] was created" % type(self.dataset).__name__)

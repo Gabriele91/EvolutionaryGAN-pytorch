@@ -273,7 +273,7 @@ class BaseModel(ABC):
 
     # return visualization images. train.py will display these images, and save the images to a html
     def get_current_visuals(self):
-        if self.opt.model == 'egan':
+        if self.opt.model == 'egan' or  self.opt.model == 'moegan':
             # load current best G
             F = self.Fitness[:,2]
             idx = np.where(F==max(F))[0][0]
@@ -297,7 +297,7 @@ class BaseModel(ABC):
 
     def get_current_scores(self):
         if self.toy_metric:
-            if self.opt.model == 'egan' or self.opt.model == 'degan':
+            if self.opt.model == 'egan' or self.opt.model == 'moegan':
                 # load current best G
                 F = self.Fitness[:,2]
                 idx = np.where(F==max(F))[0][0]
@@ -306,7 +306,7 @@ class BaseModel(ABC):
             scores_ret = OrderedDict()
             scores_ret["fitness"] = F
         else:
-            if self.opt.model == 'egan' or self.opt.model == 'degan':
+            if self.opt.model == 'egan' or self.opt.model == 'moegan':
                 # load current best G
                 F = self.Fitness[:,2]
                 idx = np.where(F==max(F))[0][0]
