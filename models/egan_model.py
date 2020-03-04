@@ -140,8 +140,8 @@ class EGANModel(BaseModel):
             y_ = None 
         else:
             y = self.CatDis.sample([bs])
-            y_ = one_hot(y, [bs, self.opt.cat_num])
-            gen_imgs = self.netG(z, self.y_)
+            #y_ = one_hot(y, [bs, self.opt.cat_num])
+            gen_imgs = self.netG(z, y)
         return gen_imgs, y_
 
     def backward_G(self, criterionG):
@@ -175,9 +175,16 @@ class EGANModel(BaseModel):
 
     def optimize_parameters(self):
         for i in range(self.opt.D_iters + 1):
-            self.real_imgs = self.input_imgs[i*self.opt.batch_size:(i+1)*self.opt.batch_size,:,:,:]
+            if self.input_imgs.ndim == 2:
+                self.real_imgs = self.input_imgs[i*self.opt.batch_size:(i+1)*self.opt.batch_size,:]
+                #print("optimize_parameters input_imgs: ", self.input_imgs.size())
+                #print("optimize_parameters real_imgs: ", self.real_imgs.size())
+            else:
+                self.real_imgs = self.input_imgs[i*self.opt.batch_size:(i+1)*self.opt.batch_size,:,:,:]
+
             if self.opt.cgan:
-                self.targets = self.input_target[i*self.opt.batch_size:(i+1)*self.opt.batch_size,:] 
+                #self.targets = self.input_targets[i*self.opt.batch_size:(i+1)*self.opt.batch_size,:]
+                self.targets = self.input_targets[i*self.opt.batch_size:(i+1)*self.opt.batch_size] 
             # update G
             if i == 0:
                 self.Fitness, self.evalimgs, self.evaly, self.sel_mut = self.Evo_G()
@@ -196,8 +203,14 @@ class EGANModel(BaseModel):
                 self.optimizer_D.step()
 
     def Evo_G(self):
-        eval_imgs = self.input_imgs[-self.eval_size:,:,:,:]
-        eval_targets = self.input_target[-self.eval_size:,:] if self.opt.cgan else None
+
+        if self.input_imgs.ndim == 2:
+            eval_imgs = self.input_imgs[-self.eval_size:,:]
+        else:
+            eval_imgs = self.input_imgs[-self.eval_size:,:,:,:]
+        #print("Evo_G eval_imgs: ", eval_imgs.size())
+        #eval_targets = self.input_targets[-self.eval_size:,:] if self.opt.cgan else None
+        eval_targets = self.input_targets[-self.eval_size:] if self.opt.cgan else None
 
         # define real images pass D
         self.real_out = self.netD(self.real_imgs) if not self.opt.cgan else self.netD(self.real_imgs, self.targets)

@@ -348,7 +348,6 @@ class CIFAR10(dset.CIFAR10):
   def __len__(self):
       return len(self.data)
 
-
 class CIFAR100(CIFAR10):
     base_folder = 'cifar-100-python'
     url = "http://www.cs.toronto.edu/~kriz/cifar-100-python.tar.gz"

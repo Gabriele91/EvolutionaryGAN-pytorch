@@ -133,7 +133,12 @@ def define_G(z_dim, output_nc, ngf, netG, norm='batch', cgan=False, c_dim=None, 
     if netG == 'DCGAN_cifar10':
         from models.DCGAN_nets import DCGANGenerator_cifar10
         net = DCGANGenerator_cifar10(z_dim, ngf=ngf, output_nc=output_nc,  norm_layer=norm_layer)
-        #net = DCGANGenerator_cifar10(z_dim, ngf=ngf, output_nc=output_nc,  norm_layer=norm_layer)
+    elif netG == 'DCGAN_mnist':
+        from models.DCGAN_nets import DCGANGenerator_mnist
+        net = DCGANGenerator_mnist(z_dim, ngf=ngf, output_nc=output_nc,  norm_layer=norm_layer)
+    elif netG == 'DCGAN_toy':
+        from models.DCGAN_nets import DCGANGenerator_toy
+        net = DCGANGenerator_toy(z_dim)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -158,6 +163,14 @@ def define_D(input_nc, ndf, netD, norm='batch', cgan=False, c_dim=None, init_typ
     if netD == 'DCGAN_cifar10':  # default PatchGAN classifier
         from models.DCGAN_nets import DCGANDiscriminator_cifar10
         net = DCGANDiscriminator_cifar10(ndf, input_nc,  norm_layer)
+        #net = DCGANDiscriminator_cifar10(ndf, input_nc,  norm_layer)
+    elif netD == 'DCGAN_mnist':  # default PatchGAN classifier
+        from models.DCGAN_nets import DCGANDiscriminator_mnist
+        net = DCGANDiscriminator_mnist(ndf, input_nc,  norm_layer)
+        #net = DCGANDiscriminator_cifar10(ndf, input_nc,  norm_layer)
+    elif netD == 'DCGAN_toy':  # default PatchGAN classifier
+        from models.DCGAN_nets import DCGANDiscriminator_toy
+        net = DCGANDiscriminator_toy()
         #net = DCGANDiscriminator_cifar10(ndf, input_nc,  norm_layer)
     else:
         raise NotImplementedError('Discriminator model name [%s] is not recognized' % net)

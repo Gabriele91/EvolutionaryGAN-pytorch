@@ -47,13 +47,17 @@ class TorchvisionDataset(BaseDataset):
         # save the option and dataset root
         BaseDataset.__init__(self, opt)
         # define the default transform function. You can use <base_dataset.get_transform>; You can also define your custom transform function
-        self.transform = get_transform(opt)
         
         # import torchvision dataset
         if opt.dataset_name == 'CIFAR10':
             from torchvision.datasets import CIFAR10 as torchvisionlib
+            self.transform = get_transform(opt, channels=3)
         elif opt.dataset_name == 'CIFAR100':
             from torchvision.datasets import CIFAR100 as torchvisionlib
+            self.transform = get_transform(opt, channels=3)
+        elif opt.dataset_name == 'FashionMNIST':
+            from torchvision.datasets import FashionMNIST as torchvisionlib
+            self.transform = get_transform(opt, channels=1)
         else:
             raise ValueError('torchvision_dataset import fault.')
 
@@ -73,7 +77,8 @@ class TorchvisionDataset(BaseDataset):
         item = self.dataload.__getitem__(index)
         img = item[0]
         label = item[1]
-
+        #print("shape:", img.size())
+        #exit(0)
         return {'image': img, 'target': label}
 
     def __len__(self):
