@@ -175,7 +175,7 @@ class EGANModel(BaseModel):
 
     def optimize_parameters(self):
         for i in range(self.opt.D_iters + 1):
-            if self.input_imgs.ndim == 2:
+            if len(self.input_imgs.shape) == 2:
                 self.real_imgs = self.input_imgs[i*self.opt.batch_size:(i+1)*self.opt.batch_size,:]
                 #print("optimize_parameters input_imgs: ", self.input_imgs.size())
                 #print("optimize_parameters real_imgs: ", self.real_imgs.size())
@@ -204,7 +204,7 @@ class EGANModel(BaseModel):
 
     def Evo_G(self):
 
-        if self.input_imgs.ndim == 2:
+        if len(self.input_imgs.shape) == 2:
             eval_imgs = self.input_imgs[-self.eval_size:,:]
         else:
             eval_imgs = self.input_imgs[-self.eval_size:,:,:,:]
