@@ -224,9 +224,9 @@ class MOEGANModel(BaseModel):
         selected_mutation = [] 
         count = 0
         # variation-evluation-selection
-        rand_criteria = [random.choice(self.G_mutations) for i in range(self.opt.candi_num)]
+        rand_criteria = [random.choice(list(enumerate(self.G_mutations))) for i in range(self.opt.candi_num)]
         for i in range(self.opt.candi_num):
-            criterionG = rand_criteria[i]
+            j, criterionG = rand_criteria[i]
             # Variation 
             self.netG.load_state_dict(self.G_candis[i])
             self.optimizer_G.load_state_dict(self.optG_candis[i])
