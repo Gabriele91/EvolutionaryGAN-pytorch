@@ -168,6 +168,10 @@ def define_D(input_nc, ndf, netD, norm='batch', cgan=False, c_dim=None, init_typ
         from models.DCGAN_nets import DCGANDiscriminator_mnist
         net = DCGANDiscriminator_mnist(ndf, input_nc,  norm_layer)
         #net = DCGANDiscriminator_cifar10(ndf, input_nc,  norm_layer)
+    elif netD == 'DCGANDropout_mnist':  # default PatchGAN classifier
+        from models.DCGAN_nets import DCGANDiscriminatorDropout_mnist
+        net = DCGANDiscriminatorDropout_mnist(ndf, input_nc,  norm_layer)
+        #net = DCGANDiscriminator_cifar10(ndf, input_nc,  norm_layer)
     elif netD == 'DCGAN_toy':  # default PatchGAN classifier
         from models.DCGAN_nets import DCGANDiscriminator_toy
         net = DCGANDiscriminator_toy()
