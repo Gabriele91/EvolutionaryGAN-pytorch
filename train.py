@@ -18,6 +18,7 @@ See options/base_options.py and options/train_options.py for more training optio
 See training and test tips at: https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/docs/tips.md
 See frequently asked questions at: https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/docs/qa.md
 """
+import os
 import time
 from options.train_options import TrainOptions
 from data import create_dataset
@@ -64,6 +65,13 @@ if __name__ == '__main__':
                 visualizer.print_current_losses(epoch, total_iters, losses, t_comp, t_data)
                 if opt.display_id > 0:
                     visualizer.plot_current_losses(epoch, float(total_iters) / dataset_size, losses)
+
+            if total_iters % opt.print_freq == 0 and opt.model == 'moegan':    # print pareto front
+                points =  [ (fits[0],fits[1]) for fits in model.Fitness ]
+                path = os.path.join(opt.checkpoints_dir, opt.name, 'paretof.txt')
+                with open(path,"w") as pffile:
+                    for x,y in points:
+                        pffile.write(str(x)+" "+str(y)+"\n")
 
             if total_iters % opt.score_freq == 0:    # print generation scores and save logging information to the disk 
                 scores = model.get_current_scores()
