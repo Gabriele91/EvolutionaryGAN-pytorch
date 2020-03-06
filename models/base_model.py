@@ -275,7 +275,7 @@ class BaseModel(ABC):
     def get_current_visuals(self):
         if self.opt.model == 'egan' or  self.opt.model == 'moegan':
             # load current best G
-            F = self.Fitness[:,2]
+            F = self.Fitness[:,2] #fq,fd,f
             idx = np.where(F==max(F))[0][0]
             self.netG.load_state_dict(self.G_candis[idx])
 
@@ -299,7 +299,7 @@ class BaseModel(ABC):
         if self.toy_metric:
             if self.opt.model == 'egan' or self.opt.model == 'moegan':
                 # load current best G
-                F = self.Fitness[:,2]
+                F = self.Fitness[:,2] #fd,fd,f
                 idx = np.where(F==max(F))[0][0]
                 self.netG.load_state_dict(self.G_candis[idx])
             # load current best G
