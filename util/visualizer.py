@@ -243,7 +243,12 @@ class Visualizer():
         """
         message = '(epoch: %d, giters: %d) ' % (epoch, iters)
         for k, v in scores.items():
-            message += '%s: %.3f ' % (k, v)
+            value = float('inf')
+            if v is float:
+                value = v
+            else:
+                value = min(v)
+            message += '%s: %.3f ' % (k, value)
 
         print(message)  # print the message
         with open(self.score_log_name, "a") as log_file:

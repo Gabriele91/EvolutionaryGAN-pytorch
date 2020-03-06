@@ -113,7 +113,35 @@ class DCGANDiscriminator_mnist(nn.Module):
         self.fc1 = nn.Linear(self.img_size, 1024, bias=use_bias)
         self.fc2 = nn.Linear(self.fc1.out_features, self.fc1.out_features//2, bias=use_bias)
         self.fc3 = nn.Linear(self.fc2.out_features, self.fc2.out_features//2, bias=use_bias)
-        self.fc4 = nn.Linear(self.fc3.out_features, 1)
+        self.fc4 = nn.Linear(self.fc3.out_features, 1)#, bias=use_bias)
+        self.model = nn.Sequential(
+                self.fc1, 
+                nn.LeakyReLU(negative_slope=0.2),
+                self.fc2, 
+                nn.LeakyReLU(negative_slope=0.2),
+                self.fc3, 
+                nn.LeakyReLU(negative_slope=0.2),
+                self.fc4, 
+                nn.Sigmoid()
+        )
+
+    def forward(self, img):
+        out = self.model(img.view(img.shape[0], -1))
+        return out
+
+class DCGANDiscriminatorDropout_mnist(nn.Module):
+    def __init__(self, ngf=64, input_nc=1,  norm_layer=nn.BatchNorm2d):
+        super(DCGANDiscriminatorDropout_mnist, self).__init__()
+        self.img_size = 28*28*input_nc
+        if type(norm_layer) == functools.partial:  # no need to use bias as BatchNorm2d has affine parameters
+            use_bias = norm_layer.func != nn.BatchNorm2d
+        else:
+            use_bias = norm_layer != nn.BatchNorm2d
+
+        self.fc1 = nn.Linear(self.img_size, 1024, bias=use_bias)
+        self.fc2 = nn.Linear(self.fc1.out_features, self.fc1.out_features//2, bias=use_bias)
+        self.fc3 = nn.Linear(self.fc2.out_features, self.fc2.out_features//2, bias=use_bias)
+        self.fc4 = nn.Linear(self.fc3.out_features, 1)#, bias=use_bias)
         self.model = nn.Sequential(
                 self.fc1, 
                 nn.LeakyReLU(negative_slope=0.2),
