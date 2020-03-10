@@ -87,6 +87,91 @@ def generate_image(true_dist, generate_dist, num=0, desc=None):
 # more functions to better separate the code, but it wouldn't make it any
 # easier to read.
 
+'''-------non-dominated sorting function-------'''      
+def non_dominated_sorting(population_size,chroms_obj_record):
+    s,n={},{}
+    front,rank={},{}
+    front[0]=[]     
+    for p in range(population_size):
+        s[p]=[]
+        n[p]=0
+        for q in range(population_size):
+            
+            if ((chroms_obj_record[p][0]<chroms_obj_record[q][0] and chroms_obj_record[p][1]<chroms_obj_record[q][1]) \
+                or (chroms_obj_record[p][0]<=chroms_obj_record[q][0] and chroms_obj_record[p][1]<chroms_obj_record[q][1])\
+                or (chroms_obj_record[p][0]<chroms_obj_record[q][0] and chroms_obj_record[p][1]<=chroms_obj_record[q][1])):
+                if q not in s[p]:
+                    s[p].append(q)
+            elif ((chroms_obj_record[p][0]>chroms_obj_record[q][0] and chroms_obj_record[p][1]>chroms_obj_record[q][1]) \
+                or (chroms_obj_record[p][0]>=chroms_obj_record[q][0] and chroms_obj_record[p][1]>chroms_obj_record[q][1])\
+                or (chroms_obj_record[p][0]>chroms_obj_record[q][0] and chroms_obj_record[p][1]>=chroms_obj_record[q][1])):
+                n[p]=n[p]+1
+        if n[p]==0:
+            rank[p]=0
+            if p not in front[0]:
+                front[0].append(p)
+    
+    i=0
+    while (front[i]!=[]):
+        Q=[]
+        for p in front[i]:
+            for q in s[p]:
+                n[q]=n[q]-1
+                if n[q]==0:
+                    rank[q]=i+1
+                    if q not in Q:
+                        Q.append(q)
+        i=i+1
+        front[i]=Q
+                
+    del front[len(front)-1]
+    return front
+'''--------calculate crowding distance function---------'''
+def calculate_crowding_distance(front,chroms_obj_record):
+    
+    distance={m:0 for m in front}
+    for o in range(2):
+        obj={m:chroms_obj_record[m][o] for m in front}
+        sorted_keys=sorted(obj, key=obj.get)
+        distance[sorted_keys[0]]=distance[sorted_keys[len(front)-1]]=999999999999
+        for i in range(1,len(front)-1):
+            if len(set(obj.values()))==1:
+                distance[sorted_keys[i]]=distance[sorted_keys[i]]
+            else:
+                distance[sorted_keys[i]]=distance[sorted_keys[i]]+(obj[sorted_keys[i+1]]-obj[sorted_keys[i-1]])/(obj[sorted_keys[len(front)-1]]-obj[sorted_keys[0]])
+            
+    return distance            
+'''----------selection----------'''
+def selection(population_size,front,chroms_obj_record,total_chromosome):   
+    N=0
+    new_pop=[]
+    while N < population_size:
+        for i in range(len(front)):
+            N=N+len(front[i])
+            if N > population_size:
+                distance=calculate_crowding_distance(front[i],chroms_obj_record)
+                sorted_cdf=sorted(distance, key=distance.get)
+                sorted_cdf.reverse()
+                for j in sorted_cdf:
+                    if len(new_pop)==population_size:
+                        break                
+                    new_pop.append(j)              
+                break
+            else:
+                new_pop.extend(front[i])
+    
+    population_list=[]
+    for n in new_pop:
+        population_list.append(total_chromosome[n])
+        
+    return population_list,new_pop
+'''---------NSGA-2 pass --------'''
+def nsga_2_pass(N, chroms_obj_record, chroms_total):
+    front = non_dominated_sorting(len(chroms_obj_record),chroms_obj_record)
+    distance = calculate_crowding_distance(front,chroms_obj_record)
+    population_list,new_pop=selection(N, front, chroms_obj_record, chroms_total)
+    return new_pop
+        
 
 def main():
     # Parameters
@@ -95,12 +180,12 @@ def main():
 
     DIM = 512
     begin_save = 0
-    loss_type = ['minimax', 'ls']#['trickLogD', 'minimax', 'ls']
+    loss_type = ['trickLogD','minimax', 'ls']#['trickLogD', 'minimax', 'ls']
     nloss = 2
     DATASET = '8gaussians'
     batchSize = 64
 
-    ncandi = 2
+    ncandi = 4
     kD = 1             # # of discrim updates for each gen update
     kG = 1            # # of discrim updates for each gen update
     ntf = 256
@@ -116,7 +201,7 @@ def main():
     beta = 1.
     GP_norm = False     # if use gradients penalty on discriminator
     LAMBDA = 2.       # hyperparameter of GP
-
+    NSGA2 = True
     # Load the dataset
 
     # MODEL D
@@ -246,9 +331,21 @@ def main():
                 [noise], g_loss_minimax, updates=up_g_minimax)
             train_g_ls = theano.function([noise], g_loss_ls, updates=up_g_ls)
 
-            gen_fn = theano.function([noise], lasagne.layers.get_output(
-                generator, deterministic=True))
+            gen_fn = theano.function([noise], lasagne.layers.get_output(generator, deterministic=True))
         else:
+            class Instance:
+                def __init__(self,fq,fd,params, img_values, image_copy):
+                    self.fq = fq
+                    self.fd = fd
+                    self.params = params
+                    self.vimg = img_values
+                    self.cimg = image_copy 
+
+                def f(self):
+                    return self.fq - self.fd 
+
+            instances = []
+            
             gen_old_params = gen_new_params
             for can_i in range(0, ncandi):
                 for type_i in range(0,nloss):
@@ -269,34 +366,48 @@ def main():
                                 np_rng.uniform(-1., 1., size=(batchSize, nz)))
                             cost = train_g_ls(zmb)
 
-                    sample_zmb = floatX(
-                        np_rng.uniform(-1., 1., size=(ntf, nz)))
+                    sample_zmb = floatX(np_rng.uniform(-1., 1., size=(ntf, nz)))
                     gen_imgs = gen_fn(sample_zmb)
                     frr_score, fd_score = dis_fn(xmb[0:ntf], gen_imgs)
-                    #frr = frr[0]
-                    frr = frr_score - fd_score
-                    #type_i = 0 
-                    #nloss = 1
-                    if can_i*nloss + type_i < ncandi:
-                        idx = can_i*nloss + type_i
-                        gen_new_params[idx] = lasagne.layers.get_all_param_values( generator)
-                        fake_rate[idx] = frr
-                        g_imgs_old[idx*ntf:(idx+1)*ntf, :] = gen_imgs
-                        fmb[int(idx*batchSize/ncandi*kD):math.ceil((idx+1)*batchSize/ncandi*kD), :] = \
-                            gen_imgs[0:int(batchSize/ncandi*kD), :]
-                    else:
-                        fr_com = fake_rate - frr
-                        if min(fr_com) < 0:
-                            ids_replace = np.where(fr_com == min(fr_com))
-                            idr = ids_replace[0][0]
-                            fake_rate[idr] = frr
+                    instances.append(Instance(frr_score, 
+                                              fd_score,
+                                              lasagne.layers.get_all_param_values(generator), 
+                                              gen_imgs,
+                                              gen_imgs[0:int(batchSize/ncandi*kD), :]))
+            if ncandi < len(instances):
+                if NSGA2==True:
+                    cromos = { idx:[float(inst.fq),float(inst.fd)] for idx,inst in enumerate(instances) }
+                    cromos_idxs = [ idx for idx,_ in enumerate(instances) ]
+                    finalpop = nsga_2_pass(ncandi, cromos, cromos_idxs)
 
-                            gen_new_params[idr] = lasagne.layers.get_all_param_values(
-                                generator)
+                    for idx,p in enumerate(finalpop):
+                        inst = instances[p]
+                        gen_new_params[idx] = inst.params
+                        fake_rate[idx] = inst.f()
+                        g_imgs_old[idx*ntf:(idx+1)*ntf, :] = inst.vimg
+                        fmb[int(idx*batchSize/ncandi*kD):math.ceil((idx+1)*batchSize/ncandi*kD), :] = inst.cimg
 
-                            g_imgs_old[idr*ntf:(idr+1)*ntf, :] = gen_imgs
-                            fmb[int(idr*batchSize/ncandi*kD):math.ceil((idr+1)*batchSize/ncandi*kD), :] = \
-                                gen_imgs[0:int(batchSize/ncandi*kD), :]
+                    with open('front/%s.tsv' % desc, 'wb') as ffront:
+                        for idx,p in enumerate(finalpop):
+                            inst = instances[p]
+                            ffront.write((str(inst.fq) + "\t" + str(inst.fd)).encode())
+                            ffront.write("\n".encode())
+                else:
+                    for idx,inst in enumerate(instances):
+                        if idx < ncandi:
+                            gen_new_params[idx] = inst.params
+                            fake_rate[idx] = inst.f()
+                            g_imgs_old[idx*ntf:(idx+1)*ntf, :] = inst.vimg
+                            fmb[int(idx*batchSize/ncandi*kD):math.ceil((idx+1)*batchSize/ncandi*kD), :] = inst.cimg
+                        else:
+                            fr_com = fake_rate - inst.f()
+                            if min(fr_com) < 0:
+                                idr = np.where(fr_com == min(fr_com))[0][0]
+                                gen_new_params[idr] = inst.params
+                                fake_rate[idr] = inst.f()
+                                g_imgs_old[idr*ntf:(idr+1)*ntf, :] = inst.vimg
+                                fmb[int(idr*batchSize/ncandi*kD):math.ceil((idr+1)*batchSize/ncandi*kD), :] = inst.cimg
+
 
         sample_xmb = toy_dataset(DATASET=DATASET, size=ncandi*ntf)
         sample_xmb = sample_xmb[0:ncandi*ntf]

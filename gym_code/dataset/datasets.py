@@ -6,7 +6,6 @@ import h5py
 import numpy as np
 import os
 import sys
-#sys.path.append('..')
 
 
 def toy_dataset(DATASET='8gaussians', size=256):
