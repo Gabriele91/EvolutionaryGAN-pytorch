@@ -49,7 +49,7 @@ def create_G(loss_type=None, discriminator=None, lr=0.0002, b1=0.5, DIM=64):
     return train_g, gen_fn, generator
 
 
-def generate_image(true_dist, generate_dist, num=0, desc=None):
+def generate_image(true_dist, generate_dist, num=0, desc=None, postfix=""):
     """
     Generates and saves a plot of the true distribution, the generator, and the
     critic.
@@ -77,8 +77,8 @@ def generate_image(true_dist, generate_dist, num=0, desc=None):
     if not os.path.isdir('tmp/'+desc):
         os.mkdir(os.path.join('tmp/', desc))
 
-    #plt.savefig('tmp/' + DATASET + '/' + 'frame' + str(frame_index[0]) + '.jpg')
-    plt.savefig('tmp/' + desc + '/frame_' + str(num) + '.jpg')
+    #plt.savefig('tmp/' + DATASET + '/' + prefix + 'frame' + str(frame_index[0]) + '.jpg')
+    plt.savefig('tmp/' + desc + '/frame_' + str(num) + postfix + '.jpg')
 
     #frame_index[0] += 1
 
@@ -439,9 +439,16 @@ def main():
 
         if n_updates % show_freq == 0:
             s_zmb = floatX(np_rng.uniform(-1., 1., size=(512, nz)))
-            g_imgs = gen_fn(s_zmb)
+            params_min = gen_new_params[np.argmin(fake_rate)]
+            params_max = gen_new_params[np.argmax(fake_rate)]
+            lasagne.layers.set_all_param_values(generator, params_min)
+            g_imgs_min = gen_fn(s_zmb)
+            lasagne.layers.set_all_param_values(generator, params_max)
+            g_imgs_max = gen_fn(s_zmb)
             xmb = toy_dataset(DATASET=DATASET, size=512)
-            generate_image(xmb, g_imgs, n_updates/save_freq, desc)
+            generate_image(xmb, g_imgs_min, n_updates/save_freq, desc, postfix="_min")
+            generate_image(xmb, g_imgs_max, n_updates/save_freq, desc, postfix="_max")
+
 
         #if n_updates % save_freq == 0 and n_updates > begin_save - 1:
             # Optionally, you could now dump the network weights to a file like this:
