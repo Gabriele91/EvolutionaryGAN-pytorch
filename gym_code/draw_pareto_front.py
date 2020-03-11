@@ -12,12 +12,22 @@ def readtsv(path):
     vy = [y for x,y in points]
     return vx,vy
 
-def main(path):
+def main(path,savepath):
     x,y = readtsv(path)
-    plt.plot(x,y)
-    plt.show()
+    if savepath == None:
+        plt.plot(x,y)
+        plt.show()
+    else:
+        fig = plt.figure()
+        plt.plot(x,y)
+        fig.savefig(savepath)
 
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    if len(sys.argv) <= 1:
+        exit(-1)
+    elif len(sys.argv) == 2:
+        main(sys.argv[1], None)
+    elif len(sys.argv) > 2:
+        main(sys.argv[1],sys.argv[2])
