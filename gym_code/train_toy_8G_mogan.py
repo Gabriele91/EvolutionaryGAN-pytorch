@@ -176,7 +176,7 @@ def nsga_2_pass(N, chroms_obj_record, chroms_total):
 def main():
     # Parameters
     task = 'toy'
-    name = '8G_MOEGAN'
+    name = '8G_MOEGAN_PFq_NFd'
 
     DIM = 512
     begin_save = 0
@@ -376,7 +376,7 @@ def main():
                                               gen_imgs[0:int(batchSize/ncandi*kD), :]))
             if ncandi < len(instances):
                 if NSGA2==True:
-                    cromos = { idx:[float(inst.fq),float(inst.fd)] for idx,inst in enumerate(instances) }
+                    cromos = { idx:[float(inst.fq),-float(inst.fd)] for idx,inst in enumerate(instances) }
                     cromos_idxs = [ idx for idx,_ in enumerate(instances) ]
                     finalpop = nsga_2_pass(ncandi, cromos, cromos_idxs)
 
