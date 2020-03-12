@@ -12,8 +12,11 @@ def readtsv(path):
     vy = [y for x,y in points]
     return vx,vy
 
-def main(path,savepath):
+def main(path,savepath,invy=False):
     x,y = readtsv(path)
+    if invy:
+        y_ = [-v for v in y]
+        y = y_
     if savepath == None:
         plt.plot(x,y)
         plt.show()
@@ -30,4 +33,5 @@ if __name__ == "__main__":
     elif len(sys.argv) == 2:
         main(sys.argv[1], None)
     elif len(sys.argv) > 2:
-        main(sys.argv[1],sys.argv[2])
+        invy = sys.argv[3].lower() == "true" if len(sys.argv) > 3  else False
+        main(sys.argv[1],sys.argv[2],invy)
