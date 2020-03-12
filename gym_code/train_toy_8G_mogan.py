@@ -185,7 +185,7 @@ def main():
     DATASET = '8gaussians'
     batchSize = 64
 
-    ncandi = 4
+    ncandi = 8
     kD = 1             # # of discrim updates for each gen update
     kG = 1            # # of discrim updates for each gen update
     ntf = 256
