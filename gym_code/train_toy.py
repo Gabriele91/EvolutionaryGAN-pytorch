@@ -465,8 +465,7 @@ def main(problem, popsize, moegan, freq):
                 FDL = np.append(FDL, fdscore)
         print(fake_rate, fake_rate_p, FDL)
         print(n_updates, real_rate.mean(), real_rate_p.mean())
-        f_log.write((str(fake_rate)+' '+str(fake_rate_p)+'\n' + str(n_updates) +
-                    ' ' + str(real_rate.mean()) + ' ' + str(real_rate_p.mean())+'\n').encode())
+        f_log.write((str(fake_rate)+' '+str(fake_rate_p)+'\n' + str(n_updates) + ' ' + str(real_rate.mean()) + ' ' + str(real_rate_p.mean())+'\n').encode())
         f_log.flush()
 
         # train D
@@ -489,10 +488,12 @@ def main(problem, popsize, moegan, freq):
                 g_imgs_min = gen_fn(s_zmb)
                 mmd2_all.append(abs(compute_metric_mmd2(g_imgs_min,xmb)))
             mmd2_all = np.array(mmd2_all)
-            with open('front/%s_mmd2u.tsv' % desc, 'wb') as ffront:
-                for idx in range(0, ncandi):
-                    ffront.write((str(fq_list[idx]) + "\t" + str(fd_list[idx]) + "\t" + str(mmd2_all[idx])).encode())
-                    ffront.write("\n".encode())
+            if NSGA2==True:
+                with open('front/%s_mmd2u.tsv' % desc, 'wb') as ffront:
+                    for idx in range(0, ncandi):
+                        ffront.write((str(fq_list[idx]) + "\t" + str(fd_list[idx]) + "\t" + str(mmd2_all[idx])).encode())
+                        ffront.write("\n".encode())
+            print(n_updates, "mmd2u:", np.min(mmd2_all), "id:", np.argmin(mmd2_all))
             #save best
             params = gen_new_params[np.argmin(mmd2_all)]
             lasagne.layers.set_all_param_values(generator, params)
