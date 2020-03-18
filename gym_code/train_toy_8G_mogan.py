@@ -18,10 +18,30 @@ import matplotlib.pyplot as plt
 import matplotlib
 import sys
 import math
+from sklearn.metrics import pairwise_kernels, pairwise_distances
+
 sys.path.append('..')
 
 matplotlib.use('Agg')
 
+def MMD2u(K, m, n):
+    """The MMD^2_u unbiased statistic.
+    """
+    Kx = K[:m, :m]
+    Ky = K[m:, m:]
+    Kxy = K[:m, m:]
+    return 1.0 / (m * (m - 1.0)) * (Kx.sum() - Kx.diagonal().sum()) + \
+        1.0 / (n * (n - 1.0)) * (Ky.sum() - Ky.diagonal().sum()) - \
+        2.0 / (m * n) * Kxy.sum()
+
+def compute_metric_mmd2(X,Y):
+    m = len(X)
+    n = len(Y)
+    sigma2 = np.median(pairwise_distances(X, Y, metric='euclidean'))**2
+    XY = np.vstack([X, Y])
+    K = pairwise_kernels(XY, metric='rbf',gamma=1.0/sigma2)
+    mmd2u = MMD2u(K, m, n)
+    return mmd2u
 
 def create_G(loss_type=None, discriminator=None, lr=0.0002, b1=0.5, DIM=64):
     noise = T.matrix('noise')
@@ -176,12 +196,12 @@ def nsga_2_pass(N, chroms_obj_record, chroms_total):
 def main():
     # Parameters
     task = 'toy'
-    name = '8G_MOEGAN_PFq_NFd'
+    name = '8G_MOEGAN_MMDu2' #'8G_MOEGAN_PFq_NFd_t2'
 
     DIM = 512
     begin_save = 0
     loss_type = ['trickLogD','minimax', 'ls']#['trickLogD', 'minimax', 'ls']
-    nloss = 2
+    nloss = 3 #2
     DATASET = '8gaussians'
     batchSize = 64
 
@@ -345,6 +365,8 @@ def main():
                     return self.fq - self.fd 
 
             instances = []
+            fq_list = np.zeros(ncandi)
+            fd_list = np.zeros(ncandi)
             
             gen_old_params = gen_new_params
             for can_i in range(0, ncandi):
@@ -383,6 +405,8 @@ def main():
                     for idx,p in enumerate(finalpop):
                         inst = instances[p]
                         gen_new_params[idx] = inst.params
+                        fq_list[idx] = inst.fq
+                        fd_list[idx] = inst.fd
                         fake_rate[idx] = inst.f()
                         g_imgs_old[idx*ntf:(idx+1)*ntf, :] = inst.vimg
                         fmb[int(idx*batchSize/ncandi*kD):math.ceil((idx+1)*batchSize/ncandi*kD), :] = inst.cimg
@@ -397,6 +421,8 @@ def main():
                         if idx < ncandi:
                             gen_new_params[idx] = inst.params
                             fake_rate[idx] = inst.f()
+                            fq_list[idx] = inst.fq
+                            fd_list[idx] = inst.fd
                             g_imgs_old[idx*ntf:(idx+1)*ntf, :] = inst.vimg
                             fmb[int(idx*batchSize/ncandi*kD):math.ceil((idx+1)*batchSize/ncandi*kD), :] = inst.cimg
                         else:
@@ -439,15 +465,32 @@ def main():
 
         if n_updates % show_freq == 0:
             s_zmb = floatX(np_rng.uniform(-1., 1., size=(512, nz)))
-            params_min = gen_new_params[np.argmin(fake_rate)]
             params_max = gen_new_params[np.argmax(fake_rate)]
-            lasagne.layers.set_all_param_values(generator, params_min)
-            g_imgs_min = gen_fn(s_zmb)
             lasagne.layers.set_all_param_values(generator, params_max)
             g_imgs_max = gen_fn(s_zmb)
+
+        if n_updates % show_freq == 0 and n_updates!=0:
+            #metric
+            s_zmb = floatX(np_rng.uniform(-1., 1., size=(512, nz)))
             xmb = toy_dataset(DATASET=DATASET, size=512)
-            generate_image(xmb, g_imgs_min, n_updates/save_freq, desc, postfix="_min")
-            generate_image(xmb, g_imgs_max, n_updates/save_freq, desc, postfix="_max")
+            mmd2_all = []
+            for i in range(0, ncandi):
+                lasagne.layers.set_all_param_values(generator, gen_new_params[i])
+                g_imgs_min = gen_fn(s_zmb)
+                mmd2_all.append(compute_metric_mmd2(g_imgs_min,xmb))
+            mmd2_all = np.array(mmd2_all)
+            with open('front/%s_mmd2u.tsv' % desc, 'wb') as ffront:
+                for idx in range(0, ncandi):
+                    ffront.write((str(fq_list[idx]) + "\t" + str(fd_list[idx]) + "\t" + str(mmd2_all[idx])).encode())
+                    ffront.write("\n".encode())
+            #save best
+            params = gen_new_params[np.argmin(mmd2_all)]
+            lasagne.layers.set_all_param_values(generator, params)
+            g_imgs_min = gen_fn(s_zmb)
+            generate_image(xmb, g_imgs_min, n_updates/save_freq, desc, postfix="_mmu2d")
+            np.savez('models/%s/gen_%d.npz'%(desc,n_updates/save_freq), *lasagne.layers.get_all_param_values(discriminator))
+            np.savez('models/%s/dis_%d.npz'%(desc,n_updates/save_freq), *lasagne.layers.get_all_param_values(generator))
+
 
 
         #if n_updates % save_freq == 0 and n_updates > begin_save - 1:
