@@ -19,6 +19,7 @@ import matplotlib
 import sys
 import math
 from sklearn.metrics import pairwise_kernels, pairwise_distances
+import argparse
 
 sys.path.append('..')
 
@@ -193,19 +194,26 @@ def nsga_2_pass(N, chroms_obj_record, chroms_total):
     return new_pop
         
 
-def main():
+def main(problem, popsize, moegan, freq):
+
     # Parameters
     task = 'toy'
-    name = '8G_MOEGAN_MMDu2' #'8G_MOEGAN_PFq_NFd_t2'
+    name = '{}_{}_MMDu2'.format(problem,"MOEGAN" if moegan else "EGAN") #'8G_MOEGAN_PFq_NFd_t2'
 
     DIM = 512
     begin_save = 0
     loss_type = ['trickLogD','minimax', 'ls']#['trickLogD', 'minimax', 'ls']
     nloss = 3 #2
-    DATASET = '8gaussians'
     batchSize = 64
 
-    ncandi = 8
+    if problem == "8G":
+        DATASET = '8gaussians'
+    elif problem == "25G":
+        DATASET = '25gaussians'
+    else:
+        exit(-1)
+
+    ncandi = popsize
     kD = 1             # # of discrim updates for each gen update
     kG = 1            # # of discrim updates for each gen update
     ntf = 256
@@ -215,13 +223,13 @@ def main():
     lr = 0.0001       # initial learning rate for adam G
     lrd = 0.0001       # initial learning rate for adam D
     N_up = 100000
-    save_freq = 10000/10
-    show_freq = 10000/10
+    save_freq = freq
+    show_freq = freq 
     test_deterministic = True
     beta = 1.
     GP_norm = False     # if use gradients penalty on discriminator
     LAMBDA = 2.       # hyperparameter of GP
-    NSGA2 = True
+    NSGA2 = moegan
     # Load the dataset
 
     # MODEL D
@@ -288,6 +296,8 @@ def main():
     desc = task + '_' + name
     print(desc)
 
+    if not os.path.isdir('front'):
+        os.mkdir(os.path.join('front'))
     if not os.path.isdir('logs'):
         os.mkdir(os.path.join('logs'))
     f_log = open('logs/%s.ndjson' % desc, 'wb')
@@ -477,7 +487,7 @@ def main():
             for i in range(0, ncandi):
                 lasagne.layers.set_all_param_values(generator, gen_new_params[i])
                 g_imgs_min = gen_fn(s_zmb)
-                mmd2_all.append(compute_metric_mmd2(g_imgs_min,xmb))
+                mmd2_all.append(abs(compute_metric_mmd2(g_imgs_min,xmb)))
             mmd2_all = np.array(mmd2_all)
             with open('front/%s_mmd2u.tsv' % desc, 'wb') as ffront:
                 for idx in range(0, ncandi):
@@ -500,15 +510,13 @@ def main():
 
 
 if __name__ == '__main__':
-    '''
-    if ('--help' in sys.argv) or ('-h' in sys.argv):
-        print("Trains a DCGAN on MNIST using Lasagne.")
-        print("Usage: %s [EPOCHS]" % sys.argv[0])
-        print()
-        print("EPOCHS: number of training epochs to perform (default: 100)")
-    else:
-        kwargs = {}
-        if len(sys.argv) > 1:
-            kwargs['num_epochs'] = int(sys.argv[1])
-    '''
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--algorithm","-a", choices=["egan","moegan"], default="moegan")
+    parser.add_argument("--problem","-p", choices=["8G","25G"],default="8G")
+    parser.add_argument("--population_size","-mu", type=int, default=8)
+    parser.add_argument("--save_frequency","-freq", type=int, default=1000)
+    arguments = parser.parse_args()
+    main(problem=arguments.problem,
+         popsize=arguments.population_size,
+         moegan=arguments.algorithm=="moegan",
+         freq=arguments.save_frequency)
