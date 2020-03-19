@@ -24,6 +24,8 @@ def readtsv(path):
 
 def main(path,savepath,invy=False):
     x,y,z = readtsv(path)
+    if z is not None:
+        print("MMD info: ", str(np.min(z))+" BEST,", str(np.average(z))+" +/- "+str(np.var(z))+" AVG")
     if invy:
         y_ = [-v for v in y]
         y = y_
@@ -35,6 +37,8 @@ def main(path,savepath,invy=False):
             z = np.array(z)
             z = 1.-(np.array(z)-np.min(z)) / (np.max(z)-np.min(z)) 
             plt.plot(x,y)
+            plt.xlabel('Quality')
+            plt.ylabel('Diversity')
             plt.scatter(x, y, c=z, s=(z*13.0) ** 2, marker='o')
             plt.show()
     else:
@@ -48,8 +52,13 @@ def main(path,savepath,invy=False):
             z = np.array(z)
             z = 1.-(np.array(z)-np.min(z)) / (np.max(z)-np.min(z)) 
             plt.plot(x,y)
+            plt.xlabel('Quality')
+            plt.ylabel('Diversity')
             plt.scatter(x, y, c=z, s=(z*13.0) ** 2, marker='o')
+            cbar = plt.colorbar()
+            cbar.set_label('MMD normalized')
             fig.savefig(savepath+"_mmd."+ext)
+
 
 
 if __name__ == "__main__":
