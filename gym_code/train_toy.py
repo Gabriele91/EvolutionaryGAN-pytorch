@@ -194,16 +194,20 @@ def nsga_2_pass(N, chroms_obj_record, chroms_total):
     return new_pop
         
 
-def main(problem, popsize, moegan, freq):
+def main(problem, 
+         popsize,
+         moegan, 
+         freq, 
+         loss_type = ['trickLogD','minimax', 'ls'],
+         postfix = None):
 
     # Parameters
     task = 'toy'
-    name = '{}_{}_MMDu2'.format(problem,"MOEGAN" if moegan else "EGAN") #'8G_MOEGAN_PFq_NFd_t2'
+    name = '{}_{}_{}MMDu2'.format(problem,"MOEGAN" if moegan else "EGAN", postfix + "_" if postfix is not None else "") #'8G_MOEGAN_PFq_NFd_t2'
 
     DIM = 512
     begin_save = 0
-    loss_type = ['trickLogD','minimax', 'ls']#['trickLogD', 'minimax', 'ls']
-    nloss = 3 #2
+    nloss = len(loss_type)
     batchSize = 64
 
     if problem == "8G":
@@ -478,7 +482,8 @@ def main(problem, popsize, moegan, freq):
             lasagne.layers.set_all_param_values(generator, params_max)
             g_imgs_max = gen_fn(s_zmb)
 
-        if n_updates % show_freq == 0 and n_updates!=0:
+        if (n_updates % show_freq == 0 and n_updates!=0) or n_updates==1:
+            id_update = int(n_updates/save_freq)
             #metric
             s_zmb = floatX(np_rng.uniform(-1., 1., size=(512, nz)))
             xmb = toy_dataset(DATASET=DATASET, size=512)
@@ -489,7 +494,7 @@ def main(problem, popsize, moegan, freq):
                 mmd2_all.append(abs(compute_metric_mmd2(g_imgs_min,xmb)))
             mmd2_all = np.array(mmd2_all)
             if NSGA2==True:
-                with open('front/%s_mmd2u.tsv' % desc, 'wb') as ffront:
+                with open('front/%d_%s_mmd2u.tsv' % (id_update, desc), 'wb') as ffront:
                     for idx in range(0, ncandi):
                         ffront.write((str(fq_list[idx]) + "\t" + str(fd_list[idx]) + "\t" + str(mmd2_all[idx])).encode())
                         ffront.write("\n".encode())
@@ -498,10 +503,14 @@ def main(problem, popsize, moegan, freq):
             params = gen_new_params[np.argmin(mmd2_all)]
             lasagne.layers.set_all_param_values(generator, params)
             g_imgs_min = gen_fn(s_zmb)
-            generate_image(xmb, g_imgs_min, n_updates/save_freq, desc, postfix="_mmu2d")
-            np.savez('models/%s/gen_%d.npz'%(desc,n_updates/save_freq), *lasagne.layers.get_all_param_values(discriminator))
-            np.savez('models/%s/dis_%d.npz'%(desc,n_updates/save_freq), *lasagne.layers.get_all_param_values(generator))
-
+            generate_image(xmb, g_imgs_min, id_update, desc, postfix="_mmu2d_best")
+            np.savez('models/%s/gen_%d.npz'%(desc,id_update), *lasagne.layers.get_all_param_values(discriminator))
+            np.savez('models/%s/dis_%d.npz'%(desc,id_update), *lasagne.layers.get_all_param_values(generator))
+            #worst_debug
+            params = gen_new_params[np.argmax(mmd2_all)]
+            lasagne.layers.set_all_param_values(generator, params)
+            g_imgs_min = gen_fn(s_zmb)
+            generate_image(xmb, g_imgs_min, id_update, desc, postfix="_mmu2d_worst")
 
 
         #if n_updates % save_freq == 0 and n_updates > begin_save - 1:
@@ -513,11 +522,24 @@ def main(problem, popsize, moegan, freq):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--algorithm","-a", choices=["egan","moegan"], default="moegan")
+    parser.add_argument("--loss_type","-l", nargs="+", choices=['trickLogD','minimax', 'ls'], default=['trickLogD','minimax', 'ls'])
     parser.add_argument("--problem","-p", choices=["8G","25G"],default="8G")
     parser.add_argument("--population_size","-mu", type=int, default=8)
     parser.add_argument("--save_frequency","-freq", type=int, default=1000)
+    parser.add_argument("--post_fix","-pfix", type=str, default=None)
     arguments = parser.parse_args()
+    print("_"*42)
+    print(" "*14+"> ARGUMENTS <")
+    print("problem:", arguments.problem)
+    print("population_size:", arguments.population_size)
+    print("algorithm:", arguments.algorithm)
+    print("loss_type:", arguments.loss_type)
+    print("save_frequency:", arguments.save_frequency)
+    print("post_fix:", arguments.post_fix)    
+    print("_"*42)
     main(problem=arguments.problem,
          popsize=arguments.population_size,
          moegan=arguments.algorithm=="moegan",
-         freq=arguments.save_frequency)
+         freq=arguments.save_frequency,
+         loss_type=arguments.loss_type,
+         postfix=arguments.post_fix)
