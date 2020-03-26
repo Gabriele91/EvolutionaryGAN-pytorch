@@ -302,6 +302,8 @@ def main(problem,
 
     if not os.path.isdir('front'):
         os.mkdir(os.path.join('front'))
+    if not os.path.isdir('front/'+desc):
+        os.mkdir(os.path.join('front/', desc))
     if not os.path.isdir('logs'):
         os.mkdir(os.path.join('logs'))
     f_log = open('logs/%s.ndjson' % desc, 'wb')
@@ -494,7 +496,8 @@ def main(problem,
                 mmd2_all.append(abs(compute_metric_mmd2(g_imgs_min,xmb)))
             mmd2_all = np.array(mmd2_all)
             if NSGA2==True:
-                with open('front/%d_%s_mmd2u.tsv' % (id_update, desc), 'wb') as ffront:
+                front_path=os.path.join('front/', desc)
+                with open('%s/%d_%s_mmd2u.tsv' % (front_path,id_update, desc), 'wb') as ffront:
                     for idx in range(0, ncandi):
                         ffront.write((str(fq_list[idx]) + "\t" + str(fd_list[idx]) + "\t" + str(mmd2_all[idx])).encode())
                         ffront.write("\n".encode())
