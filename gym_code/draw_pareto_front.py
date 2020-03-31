@@ -22,13 +22,16 @@ def readtsv(path):
         vz = [abs(p[2]) for p in points]
     return vx,vy,vz
 
-def main(path,savepath,invy=False):
+def main(path,savepath,invy=False,invx=False):
     x,y,z = readtsv(path)
     if z is not None:
         print("MMD info: ", str(np.min(z))+" BEST,", str(np.average(z))+" +/- "+str(np.var(z))+" AVG")
     if invy:
         y_ = [-v for v in y]
         y = y_
+    if invx:
+        x_ = [-v for v in x]
+        x = x_
     if savepath == None:
         plt.plot(x,y)
         plt.show()
@@ -66,6 +69,10 @@ if __name__ == "__main__":
         exit(-1)
     elif len(sys.argv) == 2:
         main(sys.argv[1], None)
-    elif len(sys.argv) > 2:
-        invy = sys.argv[3].lower() == "true" if len(sys.argv) > 3  else False
+    elif len(sys.argv) == 3:
+        invy = sys.argv[3].lower() == "true"
         main(sys.argv[1],sys.argv[2],invy)
+    elif len(sys.argv) > 3:
+        invy = sys.argv[3].lower() == "true"
+        invx = sys.argv[4].lower() == "true" if len(sys.argv) > 4  else False
+        main(sys.argv[1],sys.argv[2],invy, invx)
