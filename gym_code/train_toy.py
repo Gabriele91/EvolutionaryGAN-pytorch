@@ -199,7 +199,10 @@ def main(problem,
          moegan, 
          freq, 
          loss_type = ['trickLogD','minimax', 'ls'],
-         postfix = None):
+         postfix = None,
+         nPassD = 1, #backpropagation pass for discriminator
+         inBatchSize = 64
+         ):
 
     # Parameters
     task = 'toy'
@@ -208,7 +211,7 @@ def main(problem,
     DIM = 512
     begin_save = 0
     nloss = len(loss_type)
-    batchSize = 64
+    batchSize = inBatchSize
 
     if problem == "8G":
         DATASET = '8gaussians'
@@ -218,7 +221,7 @@ def main(problem,
         exit(-1)
 
     ncandi = popsize
-    kD = 1             # # of discrim updates for each gen update
+    kD = nPassD       # # of discrim updates for each gen update
     kG = 1            # # of discrim updates for each gen update
     ntf = 256
     b1 = 0.5          # momentum term of adam
@@ -242,15 +245,13 @@ def main(problem,
     real_imgs = T.matrix('real_imgs')
     fake_imgs = T.matrix('fake_imgs')
     # Create neural network model
-    discriminator = models_uncond.build_discriminator_toy(
-        nd=DIM, GP_norm=GP_norm)
+    discriminator = models_uncond.build_discriminator_toy(nd=DIM, GP_norm=GP_norm)
     # Create expression for passing real data through the discriminator
     real_out = lasagne.layers.get_output(discriminator, real_imgs)
     # Create expression for passing fake data through the discriminator
     fake_out = lasagne.layers.get_output(discriminator, fake_imgs)
     # Create loss expressions
-    discriminator_loss = (lasagne.objectives.binary_crossentropy(real_out, 1)
-                          + lasagne.objectives.binary_crossentropy(fake_out, 0)).mean()
+    discriminator_loss = (lasagne.objectives.binary_crossentropy(real_out, 1) + lasagne.objectives.binary_crossentropy(fake_out, 0)).mean()
 
     # Gradients penalty norm
     if GP_norm is True:
@@ -269,11 +270,9 @@ def main(problem,
         b1_d = 0.
 
     # Create update expressions for training
-    discriminator_params = lasagne.layers.get_all_params(
-        discriminator, trainable=True)
+    discriminator_params = lasagne.layers.get_all_params(discriminator, trainable=True)
     lrtd = theano.shared(lasagne.utils.floatX(lrd))
-    updates_d = lasagne.updates.adam(
-        D_loss, discriminator_params, learning_rate=lrtd, beta1=b1_d)
+    updates_d = lasagne.updates.adam(D_loss, discriminator_params, learning_rate=lrtd, beta1=b1_d)
     lrt = theano.shared(lasagne.utils.floatX(lr))
 
     # Fd Socre
@@ -282,18 +281,34 @@ def main(problem,
 
     # Compile a function performing a training step on a mini-batch (by giving
     # the updates dictionary) and returning the corresponding training loss:
-    train_d = theano.function([real_imgs, fake_imgs],
-                              discriminator_loss,
-                              updates=updates_d)
+    train_d = theano.function([real_imgs, fake_imgs],  discriminator_loss, updates=updates_d)
+
     # Compile another function generating some data
     dis_fn = theano.function([real_imgs, fake_imgs], [
                              (fake_out).mean(), Fd_score])
     disft_fn = theano.function([real_imgs, fake_imgs],
-                               [real_out.mean(),
-                                fake_out.mean(),
-                                (real_out > 0.5).mean(),
-                                (fake_out > 0.5).mean(),
-                                Fd_score])
+                               [real_out.mean(), fake_out.mean(), (real_out > 0.5).mean(),  (fake_out > 0.5).mean(),  Fd_score])
+
+    #MODEL G
+    noise = T.matrix('noise')
+    generator = models_uncond.build_generator_toy(noise, nd=DIM)
+    Tgimgs = lasagne.layers.get_output(generator)
+    Tfake_out = lasagne.layers.get_output(discriminator, Tgimgs)
+
+    g_loss_logD = lasagne.objectives.binary_crossentropy( Tfake_out, 1).mean()
+    g_loss_minimax = -lasagne.objectives.binary_crossentropy(Tfake_out, 0).mean()
+    g_loss_ls = T.mean(T.sqr((Tfake_out - 1)))
+
+    g_params = lasagne.layers.get_all_params(generator, trainable=True)
+
+    up_g_logD = lasagne.updates.adam(g_loss_logD, g_params, learning_rate=lrt, beta1=b1)
+    up_g_minimax = lasagne.updates.adam(g_loss_minimax, g_params, learning_rate=lrt, beta1=b1)
+    up_g_ls = lasagne.updates.adam(g_loss_ls, g_params, learning_rate=lrt, beta1=b1)
+
+    train_g = theano.function([noise], g_loss_logD, updates=up_g_logD)
+    train_g_minimax = theano.function([noise], g_loss_minimax, updates=up_g_minimax)
+    train_g_ls = theano.function([noise], g_loss_ls, updates=up_g_ls)
+    gen_fn = theano.function([noise], lasagne.layers.get_output(generator, deterministic=True))
 
     # Finally, launch the training loop.
     print("Starting training...")
@@ -312,7 +327,16 @@ def main(problem,
     if not os.path.isdir('models/'+desc):
         os.mkdir(os.path.join('models/', desc))
 
-    gen_new_params = []
+    instances = []
+    class Instance:
+        def __init__(self,fq,fd,params, img_values):
+            self.fq = fq
+            self.fd = fd
+            self.params = params
+            self.img = img_values
+
+        def f(self):
+            return self.fq - self.fd
 
     # We iterate over epochs:
     for n_updates in range(N_up):
@@ -321,88 +345,30 @@ def main(problem,
         # initial G cluster
         if n_updates == 0:
             for can_i in range(0, ncandi):
-                train_g, gen_fn, generator = create_G(
-                    loss_type=loss_type[can_i % nloss],
-                    discriminator=discriminator, lr=lr, b1=b1, DIM=DIM)
-                for _ in range(0, kG):
-                    zmb = floatX(np_rng.uniform(-1., 1., size=(batchSize, nz)))
-                    cost = train_g(zmb)
+                train_g, gen_fn, generator = create_G(loss_type=loss_type[can_i % nloss],discriminator=discriminator, lr=lr, b1=b1, DIM=DIM)
+                zmb = floatX(np_rng.uniform(-1., 1., size=(batchSize, nz)))
+                cost = train_g(zmb)
                 sample_zmb = floatX(np_rng.uniform(-1., 1., size=(ntf, nz)))
                 gen_imgs = gen_fn(sample_zmb)
-
-                gen_new_params.append(
-                    lasagne.layers.get_all_param_values(generator))
-
-                if can_i == 0:
-                    g_imgs_old = gen_imgs
-                    fmb = gen_imgs[0:int(batchSize/ncandi*kD), :]
-                else:
-                    g_imgs_old = np.append(g_imgs_old, gen_imgs, axis=0)
-                    newfmb = gen_imgs[0:int(batchSize/ncandi*kD), :]
-                    fmb = np.append(fmb, newfmb, axis=0)
-            # print gen_new_params
-            # MODEL G
-            noise = T.matrix('noise')
-            generator = models_uncond.build_generator_toy(noise, nd=DIM)
-            Tgimgs = lasagne.layers.get_output(generator)
-            Tfake_out = lasagne.layers.get_output(discriminator, Tgimgs)
-
-            g_loss_logD = lasagne.objectives.binary_crossentropy(
-                Tfake_out, 1).mean()
-            g_loss_minimax = - \
-                lasagne.objectives.binary_crossentropy(Tfake_out, 0).mean()
-            g_loss_ls = T.mean(T.sqr((Tfake_out - 1)))
-
-            g_params = lasagne.layers.get_all_params(generator, trainable=True)
-
-            up_g_logD = lasagne.updates.adam(
-                g_loss_logD, g_params, learning_rate=lrt, beta1=b1)
-            up_g_minimax = lasagne.updates.adam(
-                g_loss_minimax, g_params, learning_rate=lrt, beta1=b1)
-            up_g_ls = lasagne.updates.adam(
-                g_loss_ls, g_params, learning_rate=lrt, beta1=b1)
-
-            train_g = theano.function([noise], g_loss_logD, updates=up_g_logD)
-            train_g_minimax = theano.function(
-                [noise], g_loss_minimax, updates=up_g_minimax)
-            train_g_ls = theano.function([noise], g_loss_ls, updates=up_g_ls)
-
-            gen_fn = theano.function([noise], lasagne.layers.get_output(generator, deterministic=True))
+                frr_score, fd_score = dis_fn(xmb[0:ntf], gen_imgs)
+                instances.append(Instance(frr_score, 
+                                          fd_score,
+                                          lasagne.layers.get_all_param_values(generator), 
+                                          gen_imgs))
         else:
-            class Instance:
-                def __init__(self,fq,fd,params, img_values, image_copy):
-                    self.fq = fq
-                    self.fd = fd
-                    self.params = params
-                    self.vimg = img_values
-                    self.cimg = image_copy 
-
-                def f(self):
-                    return self.fq - self.fd 
-
+            instances_old = instances
             instances = []
-            fq_list = np.zeros(ncandi)
-            fd_list = np.zeros(ncandi)
-            
-            gen_old_params = gen_new_params
             for can_i in range(0, ncandi):
                 for type_i in range(0,nloss):
-                    lasagne.layers.set_all_param_values(generator, gen_old_params[can_i])
+                    lasagne.layers.set_all_param_values(generator, instances_old[can_i].params)
+                    zmb = floatX(np_rng.uniform(-1., 1., size=(batchSize, nz)))
+
                     if loss_type[type_i] == 'trickLogD':
-                        for _ in range(0, kG):
-                            zmb = floatX(
-                                np_rng.uniform(-1., 1., size=(batchSize, nz)))
-                            cost = train_g(zmb)
+                        cost = train_g(zmb)
                     elif loss_type[type_i] == 'minimax':
-                        for _ in range(0, kG):
-                            zmb = floatX(
-                                np_rng.uniform(-1., 1., size=(batchSize, nz)))
-                            cost = train_g_minimax(zmb)
+                        cost = train_g_minimax(zmb)
                     elif loss_type[type_i] == 'ls':
-                        for _ in range(0, kG):
-                            zmb = floatX(
-                                np_rng.uniform(-1., 1., size=(batchSize, nz)))
-                            cost = train_g_ls(zmb)
+                        cost = train_g_ls(zmb)
 
                     sample_zmb = floatX(np_rng.uniform(-1., 1., size=(ntf, nz)))
                     gen_imgs = gen_fn(sample_zmb)
@@ -410,79 +376,65 @@ def main(problem,
                     instances.append(Instance(frr_score, 
                                               fd_score,
                                               lasagne.layers.get_all_param_values(generator), 
-                                              gen_imgs,
-                                              gen_imgs[0:int(batchSize/ncandi*kD), :]))
-            if ncandi < len(instances):
+                                              gen_imgs))
+            if ncandi <= len(instances):
                 if NSGA2==True:
-                    cromos = { idx:[float(inst.fq),-float(inst.fd)] for idx,inst in enumerate(instances) }
+                    #add parents in the pool
+                    for inst in instances_old:
+                        lasagne.layers.set_all_param_values(generator, inst.params)
+                        gen_imgs = gen_fn(sample_zmb)
+                        frr_score, fd_score = dis_fn(xmb[0:ntf], gen_imgs)
+                        instances.append(Instance(
+                            frr_score, 
+                            fd_score,
+                            lasagne.layers.get_all_param_values(generator), 
+                            gen_imgs
+                        ))
+                    #cromos = { idx:[float(inst.fq),-0.5*float(inst.fd)] for idx,inst in enumerate(instances) } # S1
+                    cromos = { idx:[-float(inst.fq),0.5*float(inst.fd)] for idx,inst in enumerate(instances) } # S2
                     cromos_idxs = [ idx for idx,_ in enumerate(instances) ]
                     finalpop = nsga_2_pass(ncandi, cromos, cromos_idxs)
-
-                    for idx,p in enumerate(finalpop):
-                        inst = instances[p]
-                        gen_new_params[idx] = inst.params
-                        fq_list[idx] = inst.fq
-                        fd_list[idx] = inst.fd
-                        fake_rate[idx] = inst.f()
-                        g_imgs_old[idx*ntf:(idx+1)*ntf, :] = inst.vimg
-                        fmb[int(idx*batchSize/ncandi*kD):math.ceil((idx+1)*batchSize/ncandi*kD), :] = inst.cimg
-
+                    instances = [instances[p] for p in finalpop]
                     with open('front/%s.tsv' % desc, 'wb') as ffront:
-                        for idx,p in enumerate(finalpop):
-                            inst = instances[p]
+                        for inst in instances:
                             ffront.write((str(inst.fq) + "\t" + str(inst.fd)).encode())
                             ffront.write("\n".encode())
                 else:
-                    for idx,inst in enumerate(instances):
-                        if idx < ncandi:
-                            gen_new_params[idx] = inst.params
-                            fake_rate[idx] = inst.f()
-                            fq_list[idx] = inst.fq
-                            fd_list[idx] = inst.fd
-                            g_imgs_old[idx*ntf:(idx+1)*ntf, :] = inst.vimg
-                            fmb[int(idx*batchSize/ncandi*kD):math.ceil((idx+1)*batchSize/ncandi*kD), :] = inst.cimg
-                        else:
-                            fr_com = fake_rate - inst.f()
-                            if min(fr_com) < 0:
-                                idr = np.where(fr_com == min(fr_com))[0][0]
-                                gen_new_params[idr] = inst.params
-                                fake_rate[idr] = inst.f()
-                                g_imgs_old[idr*ntf:(idr+1)*ntf, :] = inst.vimg
-                                fmb[int(idr*batchSize/ncandi*kD):math.ceil((idr+1)*batchSize/ncandi*kD), :] = inst.cimg
+                    #sort new
+                    instances.sort(key=lambda inst: -inst.f()) #wrong def in the paper
+                    #print([inst.f() for inst in instances])
+                    #cut best ones
+                    instances = instances[len(instances)-ncandi:]
+                    #print([inst.f() for inst in instances])
+
 
 
         sample_xmb = toy_dataset(DATASET=DATASET, size=ncandi*ntf)
         sample_xmb = sample_xmb[0:ncandi*ntf]
         for i in range(0, ncandi):
-            xfake = g_imgs_old[i*ntf:(i+1)*ntf, :]
+            xfake = instances[i].img[0:ntf, :]
             xreal = sample_xmb[i*ntf:(i+1)*ntf, :]
             tr, fr, trp, frp, fdscore = disft_fn(xreal, xfake)
-            if i == 0:
-                fake_rate = np.array([fr])
-                real_rate = np.array([tr])
-                fake_rate_p = np.array([frp])
-                real_rate_p = np.array([trp])
-                FDL = np.array([fdscore])
-            else:
-                fake_rate = np.append(fake_rate, fr)
-                real_rate = np.append(real_rate, tr)
-                fake_rate_p = np.append(fake_rate_p, frp)
-                real_rate_p = np.append(real_rate_p, trp)
-                FDL = np.append(FDL, fdscore)
+            fake_rate = np.array([fr]) if i == 0 else np.append(fake_rate, fr)
+            real_rate = np.array([tr]) if i == 0 else np.append(real_rate, tr)
+            fake_rate_p = np.array([frp]) if i == 0 else np.append(fake_rate_p, frp)
+            real_rate_p = np.array([trp]) if i == 0 else np.append(real_rate_p, trp)
+            FDL = np.array([fdscore]) if i == 0 else np.append(FDL, fdscore)
+
         print(fake_rate, fake_rate_p, FDL)
         print(n_updates, real_rate.mean(), real_rate_p.mean())
         f_log.write((str(fake_rate)+' '+str(fake_rate_p)+'\n' + str(n_updates) + ' ' + str(real_rate.mean()) + ' ' + str(real_rate_p.mean())+'\n').encode())
         f_log.flush()
 
         # train D
-        for xreal, xfake in iter_data(xmb, shuffle(fmb), size=batchSize):
+        #for xreal, xfake in iter_data(xmb, shuffle(fmb), size=batchSize):
+        #    cost = train_d(xreal, xfake)
+        imgs_fakes = instances[0].img[0:int(batchSize/ncandi*kD), :];
+        for i in range(1,len(instances)):
+            img = instances[i].img[0:int(batchSize/ncandi*kD), :]
+            imgs_fakes = np.append(imgs_fakes, img, axis=0)
+        for xreal, xfake in iter_data(xmb, shuffle(imgs_fakes), size=batchSize):
             cost = train_d(xreal, xfake)
-
-        if n_updates % show_freq == 0:
-            s_zmb = floatX(np_rng.uniform(-1., 1., size=(512, nz)))
-            params_max = gen_new_params[np.argmax(fake_rate)]
-            lasagne.layers.set_all_param_values(generator, params_max)
-            g_imgs_max = gen_fn(s_zmb)
 
         if (n_updates % show_freq == 0 and n_updates!=0) or n_updates==1:
             id_update = int(n_updates/save_freq)
@@ -491,29 +443,29 @@ def main(problem,
             xmb = toy_dataset(DATASET=DATASET, size=512)
             mmd2_all = []
             for i in range(0, ncandi):
-                lasagne.layers.set_all_param_values(generator, gen_new_params[i])
-                g_imgs_min = gen_fn(s_zmb)
-                mmd2_all.append(abs(compute_metric_mmd2(g_imgs_min,xmb)))
+                lasagne.layers.set_all_param_values(generator, instances[i].params)
+                g_imgs = gen_fn(s_zmb)
+                mmd2_all.append(abs(compute_metric_mmd2(g_imgs,xmb)))
             mmd2_all = np.array(mmd2_all)
             if NSGA2==True:
                 front_path=os.path.join('front/', desc)
                 with open('%s/%d_%s_mmd2u.tsv' % (front_path,id_update, desc), 'wb') as ffront:
                     for idx in range(0, ncandi):
-                        ffront.write((str(fq_list[idx]) + "\t" + str(fd_list[idx]) + "\t" + str(mmd2_all[idx])).encode())
+                        ffront.write((str(instances[idx].fq) + "\t" + str(instances[idx].fd) + "\t" + str(mmd2_all[idx])).encode())
                         ffront.write("\n".encode())
             print(n_updates, "mmd2u:", np.min(mmd2_all), "id:", np.argmin(mmd2_all))
             #save best
-            params = gen_new_params[np.argmin(mmd2_all)]
+            params = instances[np.argmin(mmd2_all)].params
             lasagne.layers.set_all_param_values(generator, params)
             g_imgs_min = gen_fn(s_zmb)
             generate_image(xmb, g_imgs_min, id_update, desc, postfix="_mmu2d_best")
             np.savez('models/%s/gen_%d.npz'%(desc,id_update), *lasagne.layers.get_all_param_values(discriminator))
             np.savez('models/%s/dis_%d.npz'%(desc,id_update), *lasagne.layers.get_all_param_values(generator))
             #worst_debug
-            params = gen_new_params[np.argmax(mmd2_all)]
+            params = instances[np.argmax(mmd2_all)].params
             lasagne.layers.set_all_param_values(generator, params)
-            g_imgs_min = gen_fn(s_zmb)
-            generate_image(xmb, g_imgs_min, id_update, desc, postfix="_mmu2d_worst")
+            g_imgs_max = gen_fn(s_zmb)
+            generate_image(xmb, g_imgs_max, id_update, desc, postfix="_mmu2d_worst")
 
 
         #if n_updates % save_freq == 0 and n_updates > begin_save - 1:
@@ -530,6 +482,8 @@ if __name__ == '__main__':
     parser.add_argument("--population_size","-mu", type=int, default=8)
     parser.add_argument("--save_frequency","-freq", type=int, default=1000)
     parser.add_argument("--post_fix","-pfix", type=str, default=None)
+    parser.add_argument("--update_discrminator","-ud", type=int, default=1)
+    parser.add_argument("--batch_size","-bs", type=int, default=64)
     arguments = parser.parse_args()
     print("_"*42)
     print(" "*14+"> ARGUMENTS <")
@@ -539,10 +493,14 @@ if __name__ == '__main__':
     print("loss_type:", arguments.loss_type)
     print("save_frequency:", arguments.save_frequency)
     print("post_fix:", arguments.post_fix)    
+    print("update_discrminator:", arguments.update_discrminator)    
+    print("batch_size:", arguments.batch_size)    
     print("_"*42)
     main(problem=arguments.problem,
          popsize=arguments.population_size,
          moegan=arguments.algorithm=="moegan",
          freq=arguments.save_frequency,
          loss_type=arguments.loss_type,
-         postfix=arguments.post_fix)
+         postfix=arguments.post_fix,
+         nPassD=arguments.update_discrminator,
+         inBatchSize=arguments.batch_size)
