@@ -1,4 +1,13 @@
 .DS_Store
+gym_code/front/**/*.tsv
+gym_code/front/*.tsv
+gym_code/models/**/*.npz
+gym_code/logs/**
+gym_code/tmp/**
+gym_code/*.out
+gym_code/*.err
+gym_code/*.png
+
 debug*
 print/
 script/
