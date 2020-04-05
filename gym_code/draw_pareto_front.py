@@ -42,7 +42,7 @@ def main(path,savepath,invy=False,invx=False):
             plt.plot(x,y)
             plt.xlabel('Quality')
             plt.ylabel('Diversity')
-            plt.scatter(x, y, c=z, s=(z*13.0) ** 2, marker='o')
+            plt.scatter(x, y, c=z, s=(z*14.0) ** 2.1, marker='o')
             plt.show()
     else:
         fig = plt.figure()
