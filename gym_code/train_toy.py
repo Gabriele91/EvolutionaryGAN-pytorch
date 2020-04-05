@@ -382,6 +382,7 @@ def main(problem,
                     #add parents in the pool
                     for inst in instances_old:
                         lasagne.layers.set_all_param_values(generator, inst.params)
+                        sample_zmb = floatX(np_rng.uniform(-1., 1., size=(ntf, nz)))
                         gen_imgs = gen_fn(sample_zmb)
                         frr_score, fd_score = dis_fn(xmb[0:ntf], gen_imgs)
                         instances.append(Instance(
