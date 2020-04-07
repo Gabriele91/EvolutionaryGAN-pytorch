@@ -24,6 +24,8 @@ import argparse
 sys.path.append('..')
 
 matplotlib.use('Agg')
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
 
 def MMD2u(K, m, n):
     """The MMD^2_u unbiased statistic.

@@ -22,6 +22,8 @@ from sklearn.metrics import pairwise_kernels, pairwise_distances
 import argparse
 sys.path.append('..')
 matplotlib.use('Agg')
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
 
 def MMD2u(K, m, n, biased = False):
     """The MMD^2 statistic.

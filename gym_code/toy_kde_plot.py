@@ -25,7 +25,8 @@ matplotlib.use('Agg')
 import seaborn as sns
 from scipy import stats
 from matplotlib.colors import LogNorm
-
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
 
 def create_G(DIM=64):
     noise = T.matrix('noise')
@@ -48,9 +49,9 @@ def gen_color_map(X):
     positions = np.vstack([X.ravel(), Y.ravel()])
     values = np.vstack([m1, m2])
     kernel = stats.gaussian_kde(values)
-    kernel.set_bandwidth(bw_method=kernel.factor/2.)
+    kernel.set_bandwidth(bw_method=kernel.factor/3)
     Z = np.reshape(kernel(positions).T, X.shape) 
-    plt.imshow(np.rot90(Z), cmap='Greens', extent=[xmin, xmax, ymin, ymax])
+    plt.imshow(np.rot90(Z), cmap='Blues', extent=[xmin, xmax, ymin, ymax])
     
 
 def generate_image(true_dist, generate_dist, num=0, desc=None, path=""):
@@ -59,14 +60,15 @@ def generate_image(true_dist, generate_dist, num=0, desc=None, path=""):
     critic.
     """
     plt.clf()
+    plt.margins(0,0)
     gen_color_map(generate_dist)
-    plt.savefig(path  + '.png')
+    plt.savefig(path  + '.png', bbox_inches = 'tight', pad_inches = 0)
 
 
 def main(genpath,datasetname,outpath):
     #params
     DIM = 512
-    SAMPLES = 1024
+    SAMPLES = 25000
     nz = 2
     #load
     gen_fn, generator = create_G(DIM = DIM)
