@@ -46,30 +46,53 @@ def compute_metric_mmd2(X,Y):
     mmd2u = MMD2u(K, m, n)
     return mmd2u
 
-def create_G(loss_type=None, discriminator=None, lr=0.0002, b1=0.5, DIM=64):
-    noise = T.matrix('noise')
-    generator = models_uncond.build_generator_toy(noise, nd=DIM)
-    Tgimgs = lasagne.layers.get_output(generator)
-    Tfake_out = lasagne.layers.get_output(discriminator, Tgimgs)
+class GeneratorTrainer:
+    def __init__(self, noise, generator, discriminator, lr, b1):
+        self.noise=noise
+        self.generator=generator
+        self.discriminator=discriminator
+        self.Tgimgs = lasagne.layers.get_output(generator)
+        self.Tfake_out = lasagne.layers.get_output(discriminator, self.Tgimgs)
+        self.generator_params = lasagne.layers.get_all_params(generator, trainable=True)
+        self.g_loss_logD = lasagne.objectives.binary_crossentropy(self.Tfake_out, 1).mean()
+        self.g_loss_minimax = -lasagne.objectives.binary_crossentropy(self.Tfake_out, 0).mean()
+        self.g_loss_ls = T.mean(T.sqr((self.Tfake_out - 1)))
+        self.up_g_logD = lasagne.updates.adam(self.g_loss_logD, self.generator_params, learning_rate=lr, beta1=b1)
+        self.up_g_minimax = lasagne.updates.adam(self.g_loss_minimax, self.generator_params, learning_rate=lr, beta1=b1)
+        self.up_g_ls = lasagne.updates.adam(self.g_loss_ls, self.generator_params, learning_rate=lr, beta1=b1)
+        self.train_g = theano.function([noise], self.g_loss_logD, updates=self.up_g_logD)
+        self.train_g_minimax = theano.function([noise], self.g_loss_minimax, updates=self.up_g_minimax)
+        self.train_g_ls = theano.function([noise], self.g_loss_ls, updates=self.up_g_ls)
+        self.gen_fn = theano.function([noise],  lasagne.layers.get_output(generator, deterministic=True))
+    
+    def train(self,loss_type,zmb):
+        if loss_type == 'trickLogD':
+            return self.train_g(zmb)
+        elif loss_type == 'minimax':
+            return self.train_g_minimax(zmb)
+        elif loss_type == 'ls':
+            cost = self.train_g_ls(zmb)
+        else:
+            raise "{} is invalid loss".format(loss_type)
 
-    if loss_type == 'trickLogD':
-        generator_loss = lasagne.objectives.binary_crossentropy(
-            Tfake_out, 1).mean()
-    elif loss_type == 'minimax':
-        generator_loss = - \
-            lasagne.objectives.binary_crossentropy(Tfake_out, 0).mean()
-    elif loss_type == 'ls':
-        generator_loss = T.mean(T.sqr((Tfake_out - 1)))
-    generator_params = lasagne.layers.get_all_params(generator, trainable=True)
-    updates_g = lasagne.updates.adam(
-        generator_loss, generator_params, learning_rate=lr, beta1=b1)
-    train_g = theano.function([noise],
-                              generator_loss,
-                              updates=updates_g)
-    gen_fn = theano.function([noise],
-                             lasagne.layers.get_output(generator,
-                                                       deterministic=True))
-    return train_g, gen_fn, generator
+    def gen(self,zmb):
+        return self.gen_fn(zmb)
+
+    def set(self,params):
+        lasagne.layers.set_all_param_values(self.generator, params)
+
+    def get(self):
+        return lasagne.layers.get_all_param_values(self.generator)
+
+
+def create_G(noise=None, discriminator=None, lr=0.0002, b1=0.5, DIM=64):
+    alias_noise=T.matrix('noise') if noise==None else noise
+    generator = models_uncond.build_generator_toy(alias_noise, nd=DIM)
+    return GeneratorTrainer(alias_noise, 
+                            generator, 
+                            discriminator, 
+                            lr, 
+                            b1)
 
 
 def generate_image(true_dist, generate_dist, num=0, desc=None, postfix=""):
@@ -237,7 +260,7 @@ def main(problem,
     test_deterministic = True
     beta = 1.
     GP_norm = False     # if use gradients penalty on discriminator
-    LAMBDA = 2.       # hyperparameter of GP
+    LAMBDA = 2.       # hyperparameter sudof GP
     NSGA2 = moegan
     # Load the dataset
 
@@ -291,26 +314,9 @@ def main(problem,
     disft_fn = theano.function([real_imgs, fake_imgs],
                                [real_out.mean(), fake_out.mean(), (real_out > 0.5).mean(),  (fake_out > 0.5).mean(),  Fd_score])
 
-    #MODEL G
+    #main MODEL G
     noise = T.matrix('noise')
-    generator = models_uncond.build_generator_toy(noise, nd=DIM)
-    Tgimgs = lasagne.layers.get_output(generator)
-    Tfake_out = lasagne.layers.get_output(discriminator, Tgimgs)
-
-    g_loss_logD = lasagne.objectives.binary_crossentropy( Tfake_out, 1).mean()
-    g_loss_minimax = -lasagne.objectives.binary_crossentropy(Tfake_out, 0).mean()
-    g_loss_ls = T.mean(T.sqr((Tfake_out - 1)))
-
-    g_params = lasagne.layers.get_all_params(generator, trainable=True)
-
-    up_g_logD = lasagne.updates.adam(g_loss_logD, g_params, learning_rate=lrt, beta1=b1)
-    up_g_minimax = lasagne.updates.adam(g_loss_minimax, g_params, learning_rate=lrt, beta1=b1)
-    up_g_ls = lasagne.updates.adam(g_loss_ls, g_params, learning_rate=lrt, beta1=b1)
-
-    train_g = theano.function([noise], g_loss_logD, updates=up_g_logD)
-    train_g_minimax = theano.function([noise], g_loss_minimax, updates=up_g_minimax)
-    train_g_ls = theano.function([noise], g_loss_ls, updates=up_g_ls)
-    gen_fn = theano.function([noise], lasagne.layers.get_output(generator, deterministic=True))
+    generator_trainer = create_G(noise=noise, discriminator=discriminator, lr=lr, b1=b1, DIM=DIM)
 
     # Finally, launch the training loop.
     print("Starting training...")
@@ -347,50 +353,46 @@ def main(problem,
         # initial G cluster
         if n_updates == 0:
             for can_i in range(0, ncandi):
-                train_g, gen_fn, generator = create_G(loss_type=loss_type[can_i % nloss],discriminator=discriminator, lr=lr, b1=b1, DIM=DIM)
+                init_generator_trainer = create_G(noise=noise, discriminator=discriminator, lr=lr, b1=b1, DIM=DIM)
                 zmb = floatX(np_rng.uniform(-1., 1., size=(batchSize, nz)))
-                cost = train_g(zmb)
+                cost = init_generator_trainer.train(loss_type[can_i%nloss],zmb)
                 sample_zmb = floatX(np_rng.uniform(-1., 1., size=(ntf, nz)))
-                gen_imgs = gen_fn(sample_zmb)
+                gen_imgs = init_generator_trainer.gen(sample_zmb)
                 frr_score, fd_score = dis_fn(xmb[0:ntf], gen_imgs)
                 instances.append(Instance(frr_score, 
                                           fd_score,
-                                          lasagne.layers.get_all_param_values(generator), 
+                                          lasagne.layers.get_all_param_values(init_generator_trainer.generator), 
                                           gen_imgs))
         else:
             instances_old = instances
             instances = []
             for can_i in range(0, ncandi):
                 for type_i in range(0,nloss):
-                    lasagne.layers.set_all_param_values(generator, instances_old[can_i].params)
+                    generator_trainer.set(instances_old[can_i].params)
+                    #train
                     zmb = floatX(np_rng.uniform(-1., 1., size=(batchSize, nz)))
-
-                    if loss_type[type_i] == 'trickLogD':
-                        cost = train_g(zmb)
-                    elif loss_type[type_i] == 'minimax':
-                        cost = train_g_minimax(zmb)
-                    elif loss_type[type_i] == 'ls':
-                        cost = train_g_ls(zmb)
-
+                    generator_trainer.train(loss_type[type_i],zmb)
+                    #score
                     sample_zmb = floatX(np_rng.uniform(-1., 1., size=(ntf, nz)))
-                    gen_imgs = gen_fn(sample_zmb)
+                    gen_imgs = generator_trainer.gen(sample_zmb)
                     frr_score, fd_score = dis_fn(xmb[0:ntf], gen_imgs)
+                    #save
                     instances.append(Instance(frr_score, 
                                               fd_score,
-                                              lasagne.layers.get_all_param_values(generator), 
+                                              generator_trainer.get(), 
                                               gen_imgs))
-            if ncandi <= len(instances):
+            if ncandi <= (len(instances)+len(instances_old)):
                 if NSGA2==True:
                     #add parents in the pool
                     for inst in instances_old:
-                        lasagne.layers.set_all_param_values(generator, inst.params)
+                        generator_trainer.set(inst.params)
                         sample_zmb = floatX(np_rng.uniform(-1., 1., size=(ntf, nz)))
-                        gen_imgs = gen_fn(sample_zmb)
+                        gen_imgs = generator_trainer.gen(sample_zmb)
                         frr_score, fd_score = dis_fn(xmb[0:ntf], gen_imgs)
                         instances.append(Instance(
                             frr_score, 
                             fd_score,
-                            lasagne.layers.get_all_param_values(generator), 
+                            generator_trainer.get(),
                             gen_imgs
                         ))
                     #cromos = { idx:[float(inst.fq),-0.5*float(inst.fd)] for idx,inst in enumerate(instances) } # S1
@@ -402,7 +404,7 @@ def main(problem,
                         for inst in instances:
                             ffront.write((str(inst.fq) + "\t" + str(inst.fd)).encode())
                             ffront.write("\n".encode())
-                else:
+                elif nloss>1:
                     #sort new
                     instances.sort(key=lambda inst: -inst.f()) #wrong def in the paper
                     #print([inst.f() for inst in instances])
@@ -444,30 +446,33 @@ def main(problem,
             #metric
             s_zmb = floatX(np_rng.uniform(-1., 1., size=(512, nz)))
             xmb = toy_dataset(DATASET=DATASET, size=512)
+            #compue mmd for all points
             mmd2_all = []
             for i in range(0, ncandi):
-                lasagne.layers.set_all_param_values(generator, instances[i].params)
-                g_imgs = gen_fn(s_zmb)
+                generator_trainer.set(instances[i].params)
+                g_imgs = generator_trainer.gen(s_zmb)
                 mmd2_all.append(abs(compute_metric_mmd2(g_imgs,xmb)))
             mmd2_all = np.array(mmd2_all)
+            #print pareto front
             if NSGA2==True:
                 front_path=os.path.join('front/', desc)
                 with open('%s/%d_%s_mmd2u.tsv' % (front_path,id_update, desc), 'wb') as ffront:
                     for idx in range(0, ncandi):
                         ffront.write((str(instances[idx].fq) + "\t" + str(instances[idx].fd) + "\t" + str(mmd2_all[idx])).encode())
                         ffront.write("\n".encode())
+            #mmd2 output
             print(n_updates, "mmd2u:", np.min(mmd2_all), "id:", np.argmin(mmd2_all))
             #save best
             params = instances[np.argmin(mmd2_all)].params
-            lasagne.layers.set_all_param_values(generator, params)
-            g_imgs_min = gen_fn(s_zmb)
+            generator_trainer.set(params)
+            g_imgs_min = generator_trainer.gen(s_zmb)
             generate_image(xmb, g_imgs_min, id_update, desc, postfix="_mmu2d_best")
             np.savez('models/%s/gen_%d.npz'%(desc,id_update), *lasagne.layers.get_all_param_values(discriminator))
-            np.savez('models/%s/dis_%d.npz'%(desc,id_update), *lasagne.layers.get_all_param_values(generator))
+            np.savez('models/%s/dis_%d.npz'%(desc,id_update), *generator_trainer.get())
             #worst_debug
             params = instances[np.argmax(mmd2_all)].params
-            lasagne.layers.set_all_param_values(generator, params)
-            g_imgs_max = gen_fn(s_zmb)
+            generator_trainer.set(params)
+            g_imgs_max = generator_trainer.gen(s_zmb)
             generate_image(xmb, g_imgs_max, id_update, desc, postfix="_mmu2d_worst")
 
 
