@@ -49,44 +49,50 @@ def gen_color_map(X):
     positions = np.vstack([X.ravel(), Y.ravel()])
     values = np.vstack([m1, m2])
     kernel = stats.gaussian_kde(values)
-    kernel.set_bandwidth(bw_method=kernel.factor/3)
+    kernel.set_bandwidth(bw_method=kernel.factor/2.5)
     Z = np.reshape(kernel(positions).T, X.shape) 
     plt.imshow(np.rot90(Z), cmap='Blues', extent=[xmin, xmax, ymin, ymax])
     
 
-def generate_image(true_dist, generate_dist, num=0, desc=None, path=""):
+def generate_image(dist, num=0, desc=None, path=""):
     """
     Generates and saves a plot of the true distribution, the generator, and the
     critic.
     """
     plt.clf()
     plt.margins(0,0)
-    gen_color_map(generate_dist)
-    plt.savefig(path  + '.png', bbox_inches = 'tight', pad_inches = 0)
+    gen_color_map(dist)
+    plt.savefig(path  + '.png', bbox_inches = 'tight', pad_inches = 0, dpi = 300)
 
 
-def main(genpath,datasetname,outpath):
+def main(genpath,datasetname,outpath,target=False):
     #params
     DIM = 512
-    SAMPLES = 25000
+    SAMPLES = 3000 #3000
     nz = 2
-    #load
-    gen_fn, generator = create_G(DIM = DIM)
-    #load samples from db
-    xmb = toy_dataset(DATASET=datasetname, size=SAMPLES)
-    #for all in the path:
-    params_map = dict(np.load(genpath))
-    params=list()
-    for key,vals in sorted(params_map.items(),key=lambda x: int(x[0].split("_")[1])):
-        params.append(vals)
-    #set params
-    lasagne.layers.set_all_param_values(generator, params)
-    # generate sample
-    s_zmb = floatX(np_rng.uniform(-1., 1., size=(SAMPLES, nz)))
-    g_imgs = gen_fn(s_zmb)
-    generate_image(xmb, g_imgs, path=outpath)
+    if target:
+        #load samples from db
+        xmb = toy_dataset(DATASET=datasetname, size=SAMPLES)
+        generate_image(xmb, path=outpath)
+    else:
+        #load
+        gen_fn, generator = create_G(DIM = DIM)
+        #for all in the path:
+        params_map = dict(np.load(genpath))
+        params=list()
+        for key,vals in sorted(params_map.items(),key=lambda x: int(x[0].split("_")[1])):
+            params.append(np.float32(vals))
+        #set params
+        lasagne.layers.set_all_param_values(generator, params)
+        # generate sample
+        s_zmb = floatX(np_rng.uniform(-1., 1., size=(SAMPLES, nz)))
+        g_imgs = gen_fn(s_zmb)
+        generate_image(g_imgs, path=outpath)
 
 
 
 if __name__ == '__main__':
-    main(sys.argv[1], sys.argv[2], sys.argv[3])
+    main(sys.argv[1], 
+         sys.argv[2],
+         sys.argv[3], 
+         sys.argv[4]=="true" if len(sys.argv) >= 5 else False)
