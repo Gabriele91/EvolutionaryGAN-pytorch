@@ -1,6 +1,9 @@
 import sys
 import numpy as np
 import matplotlib.pyplot as plt 
+import matplotlib
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
 
 def readtsv(path):
     metric = False
@@ -57,11 +60,10 @@ def main(path,savepath,invy=False,invx=False):
             plt.plot(x,y)
             plt.xlabel('Quality')
             plt.ylabel('Diversity')
-            plt.scatter(x, y, c=z, s=(z*13.0) ** 2, marker='o')
+            plt.scatter(x, y, c=z, s=(z*13.0) ** 2 + 20 , marker='o')
             cbar = plt.colorbar()
             cbar.set_label('MMD normalized')
-            fig.savefig(savepath+"_mmd."+ext)
-
+            fig.savefig(savepath+"_mmd."+ext, bbox_inches='tight', pad_inches = 0, dpi = 300)
 
 
 if __name__ == "__main__":

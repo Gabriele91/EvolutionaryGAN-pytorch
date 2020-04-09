@@ -2,6 +2,9 @@ import sys
 import os
 import numpy as np
 import matplotlib.pyplot as plt 
+import matplotlib
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
 
 def readtsv(path):
     metric = False
@@ -92,6 +95,7 @@ def main(path,savepath,invy=False,invx=False, cut=0):
                 rnk = rnk[len(rnk)-cut:]
                 rnk_norm = rnk_norm[len(rnk_norm)-cut:]
 
+            plt.margins(0,0)
             x = np.array(x)
             y = np.array(y)
             z = np.array(z)
@@ -107,11 +111,13 @@ def main(path,savepath,invy=False,invx=False, cut=0):
             plt.ylabel('Diversity')
             plt.scatter(x, y, c=factor_norm, s=np.power(100,factor_norm),marker='o')
             cbar = plt.colorbar()
-            cbar.set_label('100^rank(MMD)')
+            cbar.set_label('$100^{rank(MMD)}$')
             if cut>0:
-                fig.savefig(savepath+"_"+str(cut)+"."+ext)
+                fig.savefig(savepath+"_"+str(cut)+"."+ext,  bbox_inches='tight', pad_inches = 0, dpi = 300)
+                print("Save", savepath+"_"+str(cut)+"."+ext)
             else:
-                fig.savefig(savepath+"."+ext)
+                fig.savefig(savepath+"."+ext,  bbox_inches='tight', pad_inches = 0, dpi = 300)
+                print("Save", savepath+"."+ext)
 
 
 
