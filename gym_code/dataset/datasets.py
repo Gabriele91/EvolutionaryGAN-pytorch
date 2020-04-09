@@ -12,7 +12,7 @@ def toy_dataset(DATASET='8gaussians', size=256):
 
     if DATASET == '25gaussians':
         dataset = []
-        for i in range(int(500/25)):
+        for i in range(int(size/25)):
             for x in range(-2, 3):
                 for y in range(-2, 3):
                     point = np.random.randn(2)*0.05
