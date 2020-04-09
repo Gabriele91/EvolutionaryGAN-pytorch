@@ -112,7 +112,7 @@ def main(path,datasetname):
                 params_map = dict(np.load(genpath))
                 params=list()
                 for key,vals in sorted(params_map.items(),key=lambda x: int(x[0].split("_")[1])):
-                    params.append(vals)
+                    params.append(np.float32(vals))
                 #set params
                 lasagne.layers.set_all_param_values(generator, params)
                 # generate sample
